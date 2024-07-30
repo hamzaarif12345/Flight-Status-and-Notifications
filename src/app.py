@@ -6,6 +6,9 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_socketio import SocketIO
 from flask_cors import CORS
 import pika
+import logging
+import eventlet
+import eventlet.wsgi
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql://user:password@localhost/flightdb'
@@ -19,6 +22,8 @@ CORS(app)
 connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
 channel = connection.channel()
 channel.queue_declare(queue='flight_updates')
+
+logging.basicConfig(level=logging.INFO)
 
 # Models
 class Flight(db.Model):
@@ -47,14 +52,16 @@ class UserSettings(db.Model):
     notifications = db.Column(db.Boolean, default=True)
 
     user = db.relationship('User', backref=db.backref('settings', uselist=False))
+
 db.create_all()
+
 # Fetch flight data from OpenSky Network API
 def fetch_flight_data():
     url = "https://opensky-network.org/api/states/all"
     response = requests.get(url)
-    a=str(random.randint(1, 5))
-    if response.status_code == 200:
-        flights = response.json()['states']
+    if response.status_code == 200 and 'states' in response.json():
+        flights = response.json().get('states', [])
+        a = str(random.randint(1, 5))
         return [{
             'id': i,
             'flight_iata': f[1],
@@ -67,7 +74,7 @@ def fetch_flight_data():
 @app.route('/api/flights', methods=['GET'])
 def get_flights():
     flights = fetch_flight_data()
-    return jsonify(flights)
+    return jsonify(flights) if flights else jsonify({'message': 'No flight data available'}), 200
 
 @app.route('/api/flights/<int:flight_id>', methods=['PUT'])
 def update_flight(flight_id):
@@ -112,26 +119,28 @@ def subscribe():
     subscription = Subscription(user_id=user_id, flight_id=flight_id)
     db.session.add(subscription)
     db.session.commit()
-    
+    return jsonify({"message": "Subscribed successfully"}), 201
+
 @app.route('/api/users/<int:user_id>/subscriptions', methods=['GET'])
 def get_subscriptions(user_id):
     subscriptions = Subscription.query.filter_by(user_id=user_id).all()
     result = [{"flight_id": s.flight_id} for s in subscriptions]
     return jsonify(result), 200
-    
-    return jsonify({"message": "Subscribed successfully"}), 201
+
 @socketio.on('connect')
 def handle_connect():
-    print('Client connected')
+    logging.info('Client connected')
 
 @socketio.on('disconnect')
 def handle_disconnect():
-    print('Client disconnected')
+    logging.info('Client disconnected')
 
 def send_flight_update(flight):
-    socketio.emit('flight_update', flight.as_dict(), broadcast=True)
-    channel.basic_publish(exchange='', routing_key='flight_updates', body=json.dumps(flight.as_dict()))
+    flight_data = flight.as_dict()
+    logging.info(f"Sending flight update: {flight_data}")
+    socketio.emit('flight_update', flight_data, broadcast=True)
+    channel.basic_publish(exchange='', routing_key='flight_updates', body=json.dumps(flight_data))
 
 if __name__ == '__main__':
     db.create_all()
-    socketio.run(app, debug=True, allow_unsafe_werkzeug=True)
+    socketio.run(app, debug=True, host='0.0.0.0', port=5000)
