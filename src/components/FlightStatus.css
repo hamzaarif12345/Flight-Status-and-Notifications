@@ -1,0 +1,41 @@
+/* src/components/FlightStatus.css */
+.flight-status-container {
+  max-width: 1800px;
+  margin: 0 auto;
+  padding: 20px;
+  text-align: center;
+  background-color: black;
+}
+
+.flight-status-container h1 {
+  font-size: 2.5em;
+  margin-bottom: 20px;
+  color: white;
+}
+
+.flight-list {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.flight-card {
+  background-color: gray;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  margin: 10px;
+  padding: 20px;
+  width: 250px;
+  text-align: left;
+
+}
+
+.flight-card p {
+  margin: 10px 0;
+  font-size: 1.1em;
+}
+
+.flight-card strong {
+  color: blue;
+}
